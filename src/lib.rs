@@ -9,7 +9,6 @@ pub struct Target {
     width: u32,
     height: u32,
     filter: u8,
-    format: u8,
     quality: u8,
     max_alloc: u64,
     max_width: u32,
@@ -23,7 +22,6 @@ impl Target {
         width: u32,
         height: u32,
         filter: u8,
-        format: u8,
         quality: u8,
         max_alloc: u64,
         max_width: u32,
@@ -33,7 +31,6 @@ impl Target {
             width,
             height,
             filter,
-            format,
             quality: quality.clamp(1, 100),
             max_alloc,
             max_width,
@@ -67,20 +64,6 @@ pub fn compress_image(original_image: Uint8Array, target: Target) -> Result<Uint
         .decode()
         .map_err(|err| JsValue::from_str(&err.to_string()))?;
 
-    let has_alpha_channel = match input.color() {
-        image::ColorType::L8
-        | image::ColorType::Rgb8
-        | image::ColorType::L16
-        | image::ColorType::Rgb16
-        | image::ColorType::Rgb32F => false,
-        image::ColorType::La8
-        | image::ColorType::La16
-        | image::ColorType::Rgba8
-        | image::ColorType::Rgba16
-        | image::ColorType::Rgba32F => true,
-        _ => false,
-    };
-
     let filter = match target.filter {
         1 => FilterType::Triangle,
         2 => FilterType::CatmullRom,
@@ -98,42 +81,13 @@ pub fn compress_image(original_image: Uint8Array, target: Target) -> Result<Uint
     }
 
     let mut output = source_image;
-    let mut format = match target.format {
-        0 => {
-            if has_alpha_channel && target.quality >= 100 {
-                image::ImageFormat::WebP
-            } else {
-                image::ImageFormat::Jpeg
-            }
-        }
-        1 => image::ImageFormat::WebP,
-        _ => image::ImageFormat::Jpeg,
-    };
 
     output.clear();
     let writer = Cursor::new(&mut output);
-
-    if !has_alpha_channel {
-        format = image::ImageFormat::Jpeg;
-    }
-
-    let result = match format {
-        image::ImageFormat::Jpeg => {
-            let encoder =
-                image::codecs::jpeg::JpegEncoder::new_with_quality(writer, target.quality);
-            input.write_with_encoder(encoder)
-        }
-        image::ImageFormat::WebP => {
-            let encoder = image::codecs::webp::WebPEncoder::new_lossless(writer);
-            input.write_with_encoder(encoder)
-        }
-        _ => {
-            return Err(JsValue::from_str("Unsupported output encoder"));
-        }
-    };
-
-    result.map_err(|err| JsValue::from_str(&err.to_string()))?;
-
+    let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(writer, target.quality);
+    input
+        .write_with_encoder(encoder)
+        .map_err(|err| JsValue::from_str(&err.to_string()))?;
     if original_image.length() < (output.len() as u32) {
         return Err(JsValue::from_str(
             "Final image is larger than original image",
@@ -141,8 +95,6 @@ pub fn compress_image(original_image: Uint8Array, target: Target) -> Result<Uint
     }
 
     let output_image = original_image.subarray(0, output.len() as u32);
-
     output_image.copy_from(&output);
-
     Ok(output_image)
 }
