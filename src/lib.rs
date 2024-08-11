@@ -43,16 +43,6 @@ impl Target {
 pub fn compress_image(original_image: Uint8Array, target: Target) -> Result<Uint8Array, JsValue> {
     let source_image = original_image.to_vec();
 
-    let input_format =
-        image::guess_format(&source_image).map_err(|err| JsValue::from_str(&err.to_string()))?;
-
-    match input_format {
-        image::ImageFormat::Gif | image::ImageFormat::WebP | image::ImageFormat::Avif => {
-            return Ok(original_image);
-        }
-        _ => {}
-    };
-
     let mut reader = image::ImageReader::new(Cursor::new(&source_image));
     let mut limits = Limits::default();
     limits.max_image_width = Some(target.max_width);
